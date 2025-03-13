@@ -1,71 +1,71 @@
 import { useState, useEffect } from "react";
-import { nanoid } from "nanoid";
-import ContactForm from "../ContactForm/ContactForm";
-import SearchBox from "../SearchBox/SearchBox";
-import ContactList from "../ContactList/ContactList";
-import styles from "./App.module.css";
+import { fetchImages } from "../../services/api";
+import SearchBar from "../SearchBar/SearchBar";
+import ImageGallery from "../ImageGallery/ImageGallery";
+import Loader from "../Loader/Loader";
+import LoadMoreBtn from "../LoadMoreBtn/LoadMoreBtn";
+import ErrorMessage from "../ErrorMessage/ErrorMessage";
+import ImageModal from "../ImageModal/ImageModal";
+import toast, { Toaster } from "react-hot-toast";
 
 export default function App() {
-  const [contacts, setContacts] = useState(() => {
-    const savedContacts = localStorage.getItem("contacts");
-    if (savedContacts) {
-      return JSON.parse(savedContacts);
-    } else {
-      const defaultContacts = [
-        { id: "id-1", name: "Rosie Simpson", number: "459-12-56" },
-        { id: "id-2", name: "Hermione Kline", number: "443-89-12" },
-        { id: "id-3", name: "Eden Clements", number: "645-17-79" },
-        { id: "id-4", name: "Annie Copeland", number: "227-91-26" },
-      ];
-
-      localStorage.setItem("contacts", JSON.stringify(defaultContacts));
-      return defaultContacts;
-    }
-  });
-
-  const [filter, setFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [images, setImages] = useState([]);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [modalImage, setModalImage] = useState(null);
+  const [totalPages, setTotalPages] = useState(0);
 
   useEffect(() => {
-    localStorage.setItem("contacts", JSON.stringify(contacts));
-  }, [contacts]);
+    if (!query) return;
 
-  const addContact = (newContact) => {
-    const isDuplicate = contacts.some(
-      (contact) => contact.name.toLowerCase() === newContact.name.toLowerCase()
-    );
+    const loadImages = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchImages(query, page);
 
-    if (isDuplicate) {
-      alert(`${newContact.name} already in the contact list!`);
-      return;
-    }
+        if (data.results.length === 0) {
+          toast.error("Нічого не знайдено!");
+        }
 
-    const contactWithId = { ...newContact, id: nanoid() };
-    setContacts((prevContacts) => [...prevContacts, contactWithId]);
+        setImages((prevImages) => [...prevImages, ...data.results]);
+        setTotalPages(data.total_pages);
+        console.log("totalPages:", data.total_pages);
+      } catch (error) {
+        setError("Помилка завантаження!");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadImages();
+  }, [query, page]);
+
+  const handleSearch = (newQuery) => {
+    if (newQuery === query) return;
+    setQuery(newQuery);
+    setImages([]);
+    setPage(1);
   };
-
-  const deleteContact = (contactId) => {
-    setContacts((prevContacts) =>
-      prevContacts.filter((contact) => contact.id !== contactId)
-    );
-  };
-
-  const handleFilterChange = (event) => {
-    setFilter(event.target.value);
-  };
-
-  const filteredContacts = contacts.filter((contact) =>
-    contact.name.toLowerCase().includes(filter.toLowerCase())
-  );
 
   return (
-    <div className={styles.container}>
-      <h1 className={styles.title}>Phonebook</h1>
-      <ContactForm onAddContact={addContact} />
-      <SearchBox value={filter} onChange={handleFilterChange} />
-      <ContactList
-        contacts={filteredContacts}
-        onDeleteContact={deleteContact}
-      />
+    <div>
+      <Toaster position="top-right" />
+      <SearchBar onSubmit={handleSearch} />
+      {error && <ErrorMessage message={error} />}
+      <ImageGallery images={images} onImageClick={setModalImage} />
+      {loading && <Loader />}
+
+      {/* Умовний рендеринг кнопки "Load more" */}
+      {images.length > 0 && page < totalPages && (
+        <LoadMoreBtn onClick={() => setPage(page + 1)} />
+      )}
+
+      {modalImage && (
+        <ImageModal image={modalImage} onClose={() => setModalImage(null)} />
+      )}
     </div>
   );
 }
